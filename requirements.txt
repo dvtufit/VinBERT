@@ -1,0 +1,5 @@
+peft
+flash_attn
+transformers
+Pillow
+numpy
