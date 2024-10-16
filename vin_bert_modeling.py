@@ -1,5 +1,5 @@
 import torch.nn as nn
-from transformers import AutoModel
+from transformers import AutoModel, AutoConfig
 import warnings
 from typing import Any, List, Optional, Tuple, Union
 
@@ -380,7 +380,10 @@ class BERTInternVLChatModel(PreTrainedModel):
 
         return outputs
 if __name__ == '__main__':
-    config = InternVLChatConfig()
+    config = AutoConfig.from_pretrained(
+        "5CD-AI/Vintern-1B-v2" ,
+        trust_remote_code=True, 
+    )
     model = AutoModel.from_pretrained(
         "5CD-AI/Vintern-1B-v2", 
     #     torch_dtype=torch.float16,
