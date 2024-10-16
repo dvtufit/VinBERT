@@ -1,5 +1,5 @@
 from configuration_internvl_chat import InternVLChatConfig
-from transformers import AutoModel
+from transformers import AutoModel, AutoConfig
 from vin_bert_modeling import BERTInternVLChatModel
 from peft import LoraConfig, get_peft_model
 
@@ -47,7 +47,10 @@ def unfreeze_model_lora(vin_bert_with_lora):
 
 
 if __name__ == '__main__':
-    config = InternVLChatConfig()
+    config = AutoConfig.from_pretrained(
+        "5CD-AI/Vintern-1B-v2" ,
+        trust_remote_code=True, 
+    )
     model = AutoModel.from_pretrained(
         "5CD-AI/Vintern-1B-v2", 
     #     torch_dtype=torch.float16,

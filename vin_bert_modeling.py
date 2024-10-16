@@ -331,7 +331,6 @@ class BERTInternVLChatModel(PreTrainedModel):
     def get_input_embeddings(self):
         # Kiểm tra xem language_model có phương thức get_input_embeddings không
         if hasattr(self.language_model, 'get_input_embeddings'):
-            print(self.language_model.get_input_embeddings())
             return self.language_model.get_input_embeddings()
         else:
             raise NotImplementedError("The language model does not implement get_input_embeddings.")
