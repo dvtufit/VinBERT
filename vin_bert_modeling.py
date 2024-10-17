@@ -18,7 +18,7 @@ from conversation import get_conv_template
 from modeling_intern_vit import InternVisionModel
 
 class BERTVin(nn.Module):
-    qwen_vocab_size = 151655
+    qwen_vocab_size = 896
     bert_size = 768
     num_classes = 4
 
@@ -99,6 +99,8 @@ class BERTInternVLChatModel(PreTrainedModel):
 
         vit_hidden_size = config.vision_config.hidden_size
         llm_hidden_size = config.llm_config.hidden_size
+
+        self.language_model.lm_head = nn.Linear(llm_hidden_size, llm_hidden_size)
 
         if model_mlp is None:
             self.mlp1 = nn.Sequential(
