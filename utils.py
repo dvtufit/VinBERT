@@ -16,6 +16,9 @@ def unfreeze_model_lora(vin_bert_with_lora):
     for param in vin_bert_with_lora.mlp1.parameters():  
         param.requires_grad = True
 
+    for param in vin_bert_with_lora.language_model.lm_head.parameters():  
+        param.requires_grad = True
+
     for param in vin_bert_with_lora.phobert.pooler.parameters():  
         param.requires_grad = True
     
