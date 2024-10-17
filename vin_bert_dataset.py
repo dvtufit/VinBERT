@@ -184,7 +184,7 @@ class UITDataset(Dataset):
         image_flags = []
         for image_name, caption, label in zip(image_names, captions, labels):
             image_path = os.path.join(self.train_image_dir, image_name)
-            pixel_value = image_processor.load_image(image_path)
+            pixel_value = self.image_processor.load_image(image_path)
             pixel_values.append(pixel_value)
                                     
             prompt = self.template.create(caption, pixel_value.shape[0])
