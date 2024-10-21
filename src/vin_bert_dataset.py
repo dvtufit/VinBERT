@@ -2,7 +2,6 @@ import os
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import numpy as np
-import matplotlib.pyplot as plt
 import json
 import torch
 import torchvision.transforms as T
@@ -155,23 +154,23 @@ class UITDataset(Dataset):
             return None, None, None, None
         
         return image_names, captions, labels, classes
-    def plot_labels(self):
-        classes, counts = np.unique(self.labels, return_counts=True)
-        class_names = [self.idx_to_classes[classe] for classe in classes]
-        for class_name, count in zip(class_names, counts):
-            print(f"{class_name} : {count}")
+    # def plot_labels(self):
+    #     classes, counts = np.unique(self.labels, return_counts=True)
+    #     class_names = [self.idx_to_classes[classe] for classe in classes]
+    #     for class_name, count in zip(class_names, counts):
+    #         print(f"{class_name} : {count}")
             
-        plt.bar(classes, counts, color=['blue', 'green', 'red', 'purple'])
+    #     plt.bar(classes, counts, color=['blue', 'green', 'red', 'purple'])
 
-        plt.title('Number of labels')
-        plt.axis("off")
-        plt.xlabel('Classes')
-        plt.ylabel('Number of labels')
+    #     plt.title('Number of labels')
+    #     plt.axis("off")
+    #     plt.xlabel('Classes')
+    #     plt.ylabel('Number of labels')
         
-        for i in range(len(classes)):
-            plt.text(classes[i], counts[i] + 0.1, str(counts[i]), ha='center')
+    #     for i in range(len(classes)):
+    #         plt.text(classes[i], counts[i] + 0.1, str(counts[i]), ha='center')
 
-        plt.show()
+    #     plt.show()
     
     def create_inputs(self, batch):
         image_names = batch["image_name"]

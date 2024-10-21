@@ -15,7 +15,6 @@ from transformers.utils import ModelOutput, logging
 
 from configuration_internvl_chat import InternVLChatConfig
 from conversation import get_conv_template
-from modeling_intern_vit import InternVisionModel
 
 class BERTVin(nn.Module):
     qwen_vocab_size = 896
@@ -66,7 +65,7 @@ class BERTInternVLChatModel(PreTrainedModel):
     config_class = InternVLChatConfig
     main_input_name = 'pixel_values'
     _supports_flash_attn_2 = True
-    _no_split_modules = ['InternVisionModel', 'LlamaDecoderLayer', 'Qwen2DecoderLayer']
+    _no_split_modules = ['LlamaDecoderLayer', 'Qwen2DecoderLayer']
 
     def __init__(self, config: InternVLChatConfig,model_mlp = None, vision_model=None, language_model=None):
         super().__init__(config)
@@ -86,7 +85,8 @@ class BERTInternVLChatModel(PreTrainedModel):
         if vision_model is not None:
             self.vision_model = vision_model
         else:
-            self.vision_model = InternVisionModel(config.vision_config)
+            self.vision_model = vision_model
+            assert self.vision_model is not None, 'vision_model is required.'
         if language_model is not None:
             self.language_model = language_model
         else:
@@ -149,14 +149,9 @@ class BERTInternVLChatModel(PreTrainedModel):
 
         input_ids = input_ids.reshape(B * N)
         selected = (input_ids == self.img_context_token_id)
-        try:
-            input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
-        except Exception as e:
-            vit_embeds = vit_embeds.reshape(-1, C)
-            print(f'warning: {e}, input_embeds[selected].shape={input_embeds[selected].shape}, '
-                  f'vit_embeds.shape={vit_embeds.shape}')
-            n_token = selected.sum()
-            input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds[:n_token]
+        
+        input_embeds = input_embeds.clone()  # Tạo bản sao mới để không sửa đổi bản gốc
+        input_embeds[selected] = (input_embeds[selected] * 0.0) + vit_embeds.reshape(-1, C)
 
         input_embeds = input_embeds.reshape(B, N, C)
 

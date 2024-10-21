@@ -1,6 +1,11 @@
-peft
-flash_attn
+huggingface
+flash-attn
 transformers
 Pillow
 numpy
 einops
+tqdm
+dataclasses
+timm
+matplotlib
+torchvision
