@@ -138,10 +138,15 @@ class Trainer:
         test_dataloader = DataLoader(test_dataset, batch_size=self.config.test_batch, sampler=test_sampler) 
         
         return train_dataloader, val_dataloader, test_dataloader
+    
+    def forward(self, inputs):
+        outputs = self.model(**inputs)
+        return outputs
 
-    def train(self, log=False):
+    def train(self,train_dataloader=None, val_dataloader=None, test_dataloader = None,  log=False):
         epochs = self.epochs
-        train_dataloader, val_dataloader, test_dataloader = self.create_dataloader()
+        if train_dataloader is None and val_dataloader is None and test_dataloader is None:
+            train_dataloader, val_dataloader, test_dataloader = self.create_dataloader()
         
         for epoch in range(epochs):
             self.model.train()
