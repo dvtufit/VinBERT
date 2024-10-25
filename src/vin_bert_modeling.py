@@ -256,8 +256,8 @@ class BERTInternVLChatModel(PreTrainedModel):
 
         tokenizer.padding_side = 'left'
         model_inputs = tokenizer(queries, return_tensors='pt', padding=True)
-        input_ids = model_inputs['input_ids'].to(self.device)
-        attention_mask = model_inputs['attention_mask'].to(self.device)
+        input_ids = model_inputs['input_ids'].cuda()
+        attention_mask = model_inputs['attention_mask'].cuda()
         eos_token_id = tokenizer.convert_tokens_to_ids(template.sep)
         generation_config['eos_token_id'] = eos_token_id
         generation_output = self.generate(
@@ -305,8 +305,8 @@ class BERTInternVLChatModel(PreTrainedModel):
             query = query.replace('<image>', image_tokens, 1)
 
         model_inputs = tokenizer(query, return_tensors='pt')
-        input_ids = model_inputs['input_ids'].to(self.device)
-        attention_mask = model_inputs['attention_mask'].to(self.device)
+        input_ids = model_inputs['input_ids'].cuda()
+        attention_mask = model_inputs['attention_mask'].cuda()
         generation_config['eos_token_id'] = eos_token_id
         generation_output = self.generate(
             pixel_values=pixel_values,
