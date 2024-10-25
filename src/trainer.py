@@ -1,9 +1,8 @@
+import os
 import torch
 from transformers import AdamW
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from torch.utils.data import DistributedSampler
-
 
 class Evaluation:
     def __init__(self, n_classes, dataset):
@@ -13,7 +12,6 @@ class Evaluation:
     def evaluation(self, model, dataloader, log=False):
         with torch.no_grad():
             model.eval()
-            
             total_logits = []
             total_labels = []
 
@@ -21,8 +19,6 @@ class Evaluation:
                 inputs = self.dataset.create_inputs(batch)
                 outputs = model(**inputs)
                 logits = outputs.logits
-                loss = outputs.loss
-
                 total_logits.append(logits)
                 total_labels.append(inputs["labels"])
 
@@ -31,8 +27,6 @@ class Evaluation:
 
             metrics, total_precision, total_recall, total_f1 = self.metrics_per_class(total_logits, total_labels, log)
 
-            
-
             if log:
                 print(f"{'Total':<10} {total_precision:<15.4f} {total_recall:<15.4f} {total_f1:<15.4f}")
                 with open("log_eval.txt", "w") as file:
@@ -40,37 +34,34 @@ class Evaluation:
             else:
                 print(f"{'F1':<10} {total_f1:<15.4f}")
 
-
         return total_precision, total_recall, total_f1
-            
             
     def confusion_matrix(self, logits, labels, log=False):
         with torch.no_grad():
-            predicts = torch.argmax(logits, dim=1)  
-            conf_matrix = torch.zeros(self.n_classes, self.n_classes) 
-            for t, p in zip(labels, predicts):  
-                conf_matrix[t.long(), p.long()] += 1 
+            predicts = torch.argmax(logits, dim=1)
+            conf_matrix = torch.zeros(self.n_classes, self.n_classes)
+            for t, p in zip(labels, predicts):
+                conf_matrix[t.long(), p.long()] += 1
         if log:
             print(conf_matrix)
         return conf_matrix
     
     def metrics_per_class(self, logits, labels, log=False):
-        conf_matrix = self.confusion_matrix(logits, labels, log)  # Tính confusion matrix
+        conf_matrix = self.confusion_matrix(logits, labels, log)
         metrics = []
         
-        total_tp = 0 
-        total_fp = 0  
-        total_fn = 0  
+        total_tp = 0
+        total_fp = 0
+        total_fn = 0
         
         for i in range(self.n_classes):
-            tp = conf_matrix[i, i] 
-            fp = conf_matrix.sum(0)[i] - tp 
-            fn = conf_matrix.sum(1)[i] - tp 
+            tp = conf_matrix[i, i]
+            fp = conf_matrix.sum(0)[i] - tp
+            fn = conf_matrix.sum(1)[i] - tp
             
-            precision = tp / (tp + fp + 1e-10)  
-            recall = tp / (tp + fn + 1e-10)     
-            []
-            f1 = 2 * (precision * recall) / (precision + recall + 1e-10) 
+            precision = tp / (tp + fp + 1e-10)
+            recall = tp / (tp + fn + 1e-10)
+            f1 = 2 * (precision * recall) / (precision + recall + 1e-10)
             
             metrics.append({'precision': precision.item(), 'recall': recall.item(), 'f1': f1.item()})
             
@@ -78,8 +69,8 @@ class Evaluation:
             total_fp += fp.item()
             total_fn += fn.item()
         
-        total_precision = total_tp / (total_tp + total_fp + 1e-10)  
-        total_recall = total_tp / (total_tp + total_fn + 1e-10)      
+        total_precision = total_tp / (total_tp + total_fp + 1e-10)
+        total_recall = total_tp / (total_tp + total_fn + 1e-10)
         
         total_f1 = 2 * (total_precision * total_recall) / (total_precision + total_recall + 1e-10)
         
@@ -108,7 +99,6 @@ class TrainingConfig:
 
 class Trainer:
     def __init__(self, config, model, dataset, evaluator):
-        self.model = model
         self.optimizer = AdamW(self.model.parameters(), lr=config.lr, weight_decay=0.01)
         self.epochs = config.epochs
         self.dataset = dataset
@@ -116,11 +106,11 @@ class Trainer:
         self.config = config
     
     def create_dataloader(self):
-        train_size = int(self.config.train_size * len(self.dataset)) 
-        test_size = len(self.dataset) - train_size 
+        train_size = int(self.config.train_size * len(self.dataset))
+        test_size = len(self.dataset) - train_size
 
-        val_size = int(0.5 * test_size) 
-        test_size = test_size - val_size 
+        val_size = int(0.5 * test_size)
+        test_size -= val_size
 
         print(f"Train len: {train_size}")
         print(f"Test + Val: {test_size}")
@@ -128,22 +118,27 @@ class Trainer:
         train_dataset, test_dataset = torch.utils.data.random_split(self.dataset, [train_size, test_size + val_size])
         val_dataset, test_dataset = torch.utils.data.random_split(test_dataset, [val_size, test_size])
 
-        # Sử dụng DistributedSampler
-        train_sampler = DistributedSampler(train_dataset)
-        val_sampler = DistributedSampler(val_dataset)
-        test_sampler = DistributedSampler(test_dataset)
 
-        train_dataloader = DataLoader(train_dataset, batch_size=self.config.train_batch, sampler=train_sampler)  
-        val_dataloader = DataLoader(val_dataset, batch_size=self.config.val_batch, sampler=val_sampler)
-        test_dataloader = DataLoader(test_dataset, batch_size=self.config.test_batch, sampler=test_sampler) 
+        train_dataloader = DataLoader(train_dataset, batch_size=self.config.train_batch)
+        val_dataloader = DataLoader(val_dataset, batch_size=self.config.val_batch)
+        test_dataloader = DataLoader(test_dataset, batch_size=self.config.test_batch)
+
+        print(f"Train batch: {len(train_dataloader)}")
+        print(f"Val batch: {len(val_dataloader)}")
+        print(f"Test batch: {len(test_dataloader)}")
         
         return train_dataloader, val_dataloader, test_dataloader
     
     def forward(self, inputs):
         outputs = self.model(**inputs)
         return outputs
+    
+    def save_model(self, model_dir):
+        torch.save(self.model.state_dict(), model_dir)
+        print(f"Model saved at {model_dir}")
 
-    def train(self,train_dataloader=None, val_dataloader=None, test_dataloader = None,  log=False):
+    def train(self, train_dataloader=None, val_dataloader=None, test_dataloader=None, log=False):
+        print("Start training...")
         epochs = self.epochs
         if train_dataloader is None and val_dataloader is None and test_dataloader is None:
             train_dataloader, val_dataloader, test_dataloader = self.create_dataloader()
@@ -152,25 +147,26 @@ class Trainer:
             self.model.train()
             total_train_loss = 0
             
-            progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch+1}/{epochs}")
-    
+            progress_bar = tqdm(train_dataloader, desc=f"Epoch {epoch + 1}/{epochs}")
+
             for batch in progress_bar:
                 inputs = self.dataset.create_inputs(batch)
-                
+
                 self.optimizer.zero_grad()
 
-                outputs = self.model(**inputs)
+                outputs = self.forward(inputs)
                 logits = outputs.logits
                 loss = outputs.loss
-                
+
                 loss.backward()
                 self.optimizer.step()
 
-                total_train_loss += loss.item()  # Cộng dồn tổng mất mát
+                total_train_loss += loss.item()
                 progress_bar.set_postfix(loss=loss.item())
 
             avg_train_loss = total_train_loss / len(train_dataloader)
-            print(f"Average training loss for epoch {epoch+1}: {avg_train_loss:.4f}")
+            print(f"Average training loss for epoch {epoch + 1}: {avg_train_loss:.4f}")
 
             # Đánh giá trên tập xác thực
-            # metrics, total_precision, total_recall, total_f1 = self.evaluator.evaluation(self.model, val_dataloader, log)
+            if val_dataloader is not None:
+                metrics, total_precision, total_recall, total_f1 = self.evaluator.evaluation(self.model, val_dataloader, log)

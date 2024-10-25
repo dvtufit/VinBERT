@@ -21,10 +21,10 @@ class BERTVin(nn.Module):
     bert_size = 768
     num_classes = 4
 
-    def __init__(self, bert_model=None):
+    def __init__(self, bert_model=None, device='cuda'):
         super(BERTVin, self).__init__()
         if bert_model is None:
-            bert_model = AutoModel.from_pretrained("vinai/phobert-base").eval().cuda()
+            bert_model = AutoModel.from_pretrained("vinai/phobert-base").eval().to(device)
 
         self.mlp = nn.Sequential(
             nn.LayerNorm(self.qwen_vocab_size),  
@@ -67,7 +67,7 @@ class BERTInternVLChatModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _no_split_modules = ['LlamaDecoderLayer', 'Qwen2DecoderLayer']
 
-    def __init__(self, config: InternVLChatConfig,model_mlp = None, vision_model=None, language_model=None):
+    def __init__(self, config: InternVLChatConfig,model_mlp = None, vision_model=None, language_model=None , device='cuda'):
         super().__init__(config)
 
         assert version_cmp(transformers.__version__, '4.37.0', 'ge')
@@ -99,6 +99,7 @@ class BERTInternVLChatModel(PreTrainedModel):
 
         vit_hidden_size = config.vision_config.hidden_size
         llm_hidden_size = config.llm_config.hidden_size
+        self.device = device
 
         self.language_model.lm_head = nn.Linear(llm_hidden_size, llm_hidden_size)
 
@@ -112,7 +113,7 @@ class BERTInternVLChatModel(PreTrainedModel):
         else:
             self.mlp1 = model_mlp
         
-        self.phobert = BERTVin().cuda()
+        self.phobert = BERTVin(device=self.device).to(self.device)
 
         self.img_context_token_id = None
         self.conv_template = get_conv_template(self.template)
@@ -256,8 +257,8 @@ class BERTInternVLChatModel(PreTrainedModel):
 
         tokenizer.padding_side = 'left'
         model_inputs = tokenizer(queries, return_tensors='pt', padding=True)
-        input_ids = model_inputs['input_ids'].cuda()
-        attention_mask = model_inputs['attention_mask'].cuda()
+        input_ids = model_inputs['input_ids'].to(self.device)
+        attention_mask = model_inputs['attention_mask'].to(self.device)
         eos_token_id = tokenizer.convert_tokens_to_ids(template.sep)
         generation_config['eos_token_id'] = eos_token_id
         generation_output = self.generate(
@@ -305,8 +306,8 @@ class BERTInternVLChatModel(PreTrainedModel):
             query = query.replace('<image>', image_tokens, 1)
 
         model_inputs = tokenizer(query, return_tensors='pt')
-        input_ids = model_inputs['input_ids'].cuda()
-        attention_mask = model_inputs['attention_mask'].cuda()
+        input_ids = model_inputs['input_ids'].to(self.device)
+        attention_mask = model_inputs['attention_mask'].to(self.device)
         generation_config['eos_token_id'] = eos_token_id
         generation_output = self.generate(
             pixel_values=pixel_values,
@@ -385,7 +386,7 @@ if __name__ == '__main__':
     #     torch_dtype=torch.float16,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
-    ).eval().cuda()
+    ).eval().to('cuda')
 
     vin_bert = BERTInternVLChatModel(
         config = config,

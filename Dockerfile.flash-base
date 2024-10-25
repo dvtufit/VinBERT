@@ -1,0 +1,16 @@
+# Kế thừa từ image đã có
+FROM ncompasstech/flash-attn-base:0.0.3
+
+# Đặt thư mục làm việc
+WORKDIR /opt/ml/code
+
+COPY requirements.txt .
+
+RUN pip install -r requirements.txt
+
+RUN python -c "import flash_attn"
+
+COPY ./src .
+
+ENV SAGEMAKER_PROGRAM train.py
+

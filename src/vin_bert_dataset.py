@@ -115,12 +115,13 @@ class ImageProcessor:
         return pixel_values
     
 class UITDataset(Dataset):
-    def __init__(self, train_image_dir, train_text_path, tokenizer, template, image_processor):
+    def __init__(self, train_image_dir, train_text_path, tokenizer, template, image_processor , device='cuda'):
         self.train_image_dir = train_image_dir
         self.train_text_path = train_text_path
         self.tokenizer = tokenizer
         self.template = template
         self.image_processor = image_processor
+        self.device = device
         
         self.tokenizer.padding_side = 'left'
         
@@ -205,15 +206,15 @@ class UITDataset(Dataset):
         
         # Create encode inputs
         encoded = self.tokenizer(prompts, padding = True, return_tensors = 'pt')
-        prompts_encoded = encoded["input_ids"].cuda()
-        attention_mask = encoded["attention_mask"].cuda()
+        prompts_encoded = encoded["input_ids"].to(self.device)
+        attention_mask = encoded["attention_mask"].to(self.device)
                 
         return {
-            "pixel_values" : torch.stack(pixel_values_padding).view(-1, 3, 448, 448).cuda(),
+            "pixel_values" : torch.stack(pixel_values_padding).view(-1, 3, 448, 448).to(self.device),
             "input_ids" : prompts_encoded,
             "attention_mask" : attention_mask,
-            "image_flags" : torch.tensor(image_flags).unsqueeze(-1).cuda(),
-            "labels" : labels.cuda() 
+            "image_flags" : torch.tensor(image_flags).unsqueeze(-1).to(self.device),
+            "labels" : labels.to(self.device)
         }
         
     def __len__(self):
