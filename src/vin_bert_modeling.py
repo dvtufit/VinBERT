@@ -21,10 +21,10 @@ class BERTVin(nn.Module):
     bert_size = 768
     num_classes = 4
 
-    def __init__(self, bert_model=None, device='cuda'):
+    def __init__(self, bert_model=None):
         super(BERTVin, self).__init__()
         if bert_model is None:
-            bert_model = AutoModel.from_pretrained("vinai/phobert-base").eval().to(device)
+            bert_model = AutoModel.from_pretrained("vinai/phobert-base").eval()
 
         self.mlp = nn.Sequential(
             nn.LayerNorm(self.qwen_vocab_size),  
@@ -99,7 +99,6 @@ class BERTInternVLChatModel(PreTrainedModel):
 
         vit_hidden_size = config.vision_config.hidden_size
         llm_hidden_size = config.llm_config.hidden_size
-        self.device = device
 
         self.language_model.lm_head = nn.Linear(llm_hidden_size, llm_hidden_size)
 
@@ -113,7 +112,7 @@ class BERTInternVLChatModel(PreTrainedModel):
         else:
             self.mlp1 = model_mlp
         
-        self.phobert = BERTVin(device=self.device).to(self.device)
+        self.phobert = BERTVin()
 
         self.img_context_token_id = None
         self.conv_template = get_conv_template(self.template)
