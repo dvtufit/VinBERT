@@ -15,6 +15,7 @@ from transformers.utils import ModelOutput, logging
 
 from configuration_internvl_chat import InternVLChatConfig
 from conversation import get_conv_template
+from modeling_intern_vit import InternVisionModel
 
 class BERTVin(nn.Module):
     qwen_vocab_size = 896
@@ -85,8 +86,7 @@ class BERTInternVLChatModel(PreTrainedModel):
         if vision_model is not None:
             self.vision_model = vision_model
         else:
-            self.vision_model = vision_model
-            assert self.vision_model is not None, 'vision_model is required.'
+            self.vision_model = InternVisionModel(config.vision_config)
         if language_model is not None:
             self.language_model = language_model
         else:

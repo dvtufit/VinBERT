@@ -17,7 +17,7 @@ from transformers.modeling_outputs import (BaseModelOutput,
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
-from .configuration_intern_vit import InternVisionConfig
+from configuration_intern_vit import InternVisionConfig
 
 try:
     try:  # v1
