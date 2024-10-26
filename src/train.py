@@ -1,17 +1,20 @@
 import os
 import torch
-import psutil
-import torch_xla.core.xla_model as xm
-import torch_xla.distributed.xla_backend
-import torch_xla.distributed.parallel_loader as pl
-from torch.utils.data import DataLoader, DistributedSampler
-from transformers import AutoModel, AutoConfig, AutoTokenizer
+import torch.distributed
+from transformers import AutoConfig, AutoTokenizer
 from vin_bert_modeling import BERTInternVLChatModel
 from utils import freeze_model_org, unfreeze_model_lora
 from vin_bert_dataset import UITDataset, PromptTemplate, ImageProcessor
 from trainer import Evaluation, TrainingConfig
 from peft import LoraConfig, get_peft_model
+from torch.utils.data import DataLoader
 from transformers import AdamW
+import psutil
+from torch.utils.data.distributed import DistributedSampler
+import torch_xla.core.xla_model as xm
+import torch_xla.distributed.parallel_loader as pl
+import torch_xla.distributed.xla_backend
+
 
 def calculate_f1(preds, labels, num_classes):
     f1_scores = []
@@ -29,6 +32,17 @@ def calculate_f1(preds, labels, num_classes):
     return sum(f1_scores) / num_classes if num_classes > 0 else 0
 
 def main(args):
+    device = "xla" if xm.xla_device() is not None else "cuda"
+    print(f"Using device: {device}")
+
+    try:
+        torch.distributed.init_process_group(backend="xla")
+        world_size = torch.distributed.get_world_size()
+        print(f"World size: {world_size}")
+    except Exception as e:
+        print(f"Failed to initialize process group: {e}")
+        world_size = 1
+
     train_image_dir = os.path.join(args.train_dir, "train-images")
     train_text_path = os.path.join(args.train_dir, "vimmsd-train.json")
 
@@ -94,31 +108,36 @@ def main(args):
     train_size = int(args.train_size * len(dataset)) 
     test_size = len(dataset) - train_size 
 
-    val_size = int(0.5 * test_size) 
+    val_size = int(0.9 * test_size) 
     test_size = test_size - val_size 
 
     print(f"Train size: {train_size}, Val size: {val_size}, Test size: {test_size}")
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size + val_size])
     val_dataset, test_dataset = torch.utils.data.random_split(test_dataset, [val_size, test_size])
 
-    # Tạo DistributedSampler cho TPU
-    train_sampler = DistributedSampler(train_dataset)
-    train_dataloader = DataLoader(train_dataset, batch_size=config.train_batch, sampler=train_sampler)  
-    val_dataloader = DataLoader(val_dataset, batch_size=config.val_batch, shuffle=True)
-    test_dataloader = DataLoader(test_dataset, batch_size=config.test_batch, shuffle=False) 
+    if world_size > 1:
+        train_sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=xm.get_ordinal(), shuffle=True)
+        val_sampler = DistributedSampler(val_dataset, num_replicas=world_size, rank=xm.get_ordinal(), shuffle=False)
+        test_sampler = DistributedSampler(test_dataset, num_replicas=world_size, rank=xm.get_ordinal(), shuffle=False)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=config.train_batch, shuffle=not train_sampler, sampler=train_sampler)  
+    val_dataloader = DataLoader(val_dataset, batch_size=config.val_batch, shuffle=not val_sampler, sampler=val_sampler)
+    test_dataloader = DataLoader(test_dataset, batch_size=config.test_batch, shuffle=not test_sampler, sampler=test_sampler) 
 
     optimizer = AdamW(vin_bert_with_lora.parameters(), lr=config.lr, weight_decay=0.01)
+
+    process = psutil.Process(os.getpid())
 
     print("Start Training ...")
     for epoch in range(config.epochs):
         vin_bert_with_lora.train()
         total_train_loss = 0
 
-        train_sampler.set_epoch(epoch)  # Đặt epoch cho DistributedSampler
+        if world_size > 1:
+            train_sampler.set_epoch(epoch)
 
         for batch_idx, batch in enumerate(train_dataloader):
             inputs = dataset.create_inputs(batch)
-            inputs = {k: v.to(xm.xla_device()) for k, v in inputs.items()}  # Chuyển inputs lên TPU
 
             optimizer.zero_grad()
 
@@ -128,15 +147,15 @@ def main(args):
 
             if loss is not None:
                 loss.backward()
-                xm.optimizer_step(optimizer)  # Cập nhật optimizer cho TPU
+                xm.optimizer_step(optimizer)
 
                 total_train_loss += loss.item()
 
             # Ghi log loss và RAM sử dụng mỗi 10 batch
             if (batch_idx + 1) % 10 == 0:
                 avg_loss = total_train_loss / (batch_idx + 1)
-                ram_usage = psutil.virtual_memory().used / (1024 ** 2)  # Chuyển đổi sang MB
-                print(f"Epoch {epoch + 1}, Batch {batch_idx + 1}: Average Loss = {avg_loss:.4f}, RAM Usage = {ram_usage:.2f} MB")
+                ram_usage = process.memory_info().rss / (1024 ** 2)  # Convert to MB
+                print(f"Epoch {epoch + 1}, Rank = {xm.get_ordinal()}, Batch {batch_idx + 1}: Loss = {loss.item()}, Average Loss = {avg_loss:.4f}, RAM Usage = {ram_usage:.2f} MB")
 
         avg_train_loss = total_train_loss / len(train_dataloader)
         print(f"Epoch {epoch + 1} - Average training loss: {avg_train_loss:.4f}")
@@ -148,7 +167,6 @@ def main(args):
         with torch.no_grad():
             for batch in val_dataloader:
                 inputs = dataset.create_inputs(batch)
-                inputs = {k: v.to(xm.xla_device()) for k, v in inputs.items()}  # Chuyển inputs lên TPU
                 outputs = vin_bert_with_lora(inputs)
                 logits = outputs.logits
                 predictions = torch.argmax(logits, dim=-1)
@@ -165,8 +183,8 @@ def main(args):
     os.makedirs(args.model_dir, exist_ok=True)
     save_path = os.path.join(args.model_dir, "vin_bert_with_lora_model.pth")
     print("Saving the model ...")
-    torch.save(vin_bert_with_lora.state_dict(), save_path)
-    print("Model saved successfully to", save_path)
+    xm.save(vin_bert_with_lora.state_dict(), save_path)
+    print("Model saved successfully to ", save_path)
 
 
 if __name__ == '__main__':
