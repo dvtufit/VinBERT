@@ -16,8 +16,7 @@ from transformers.modeling_outputs import (BaseModelOutput,
                                            BaseModelOutputWithPooling)
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
-import torch_xla
-
+from torch_xla.utils.checkpoint import checkpoint
 from configuration_intern_vit import InternVisionConfig
 
 try:
@@ -347,7 +346,7 @@ class InternVisionEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-                layer_outputs = torch_xla.utils.checkpoint.checkpoint(
+                layer_outputs = checkpoint(
                     encoder_layer,
                     hidden_states)
             else:
