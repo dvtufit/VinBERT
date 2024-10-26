@@ -115,7 +115,7 @@ class ImageProcessor:
         return pixel_values
     
 class UITDataset(Dataset):
-    def __init__(self, train_image_dir, train_text_path, tokenizer, template, image_processor , device='cuda'):
+    def __init__(self, train_image_dir, train_text_path, tokenizer, template, image_processor , device='cuda', split=None):
         self.train_image_dir = train_image_dir
         self.train_text_path = train_text_path
         self.tokenizer = tokenizer
@@ -126,6 +126,29 @@ class UITDataset(Dataset):
         self.tokenizer.padding_side = 'left'
         
         self.image_names, self.captions, self.labels, self.classes = self.get_data()
+        
+        if split:
+            self.image_names, self.captions, self.labels, self.classes = self.get_split(split)
+                    
+    def get_split(self, split):
+        count = {k : 0 for k in self.classes_to_idx.keys()}
+        image_names = []
+        captions = []
+        labels = []
+        classes = []
+        for image_name, caption, label in zip(self.image_names, self.captions, self.labels):
+            class_name = self.idx_to_classes[label]
+            if count[class_name] < split:
+                count[class_name] += 1
+                image_names.append(image_name)
+                captions.append(caption)
+                labels.append(label)
+                classes.append(class_name)
+            if sum([v for k , v in count.items()]) >= split * 4 :
+                break
+            
+        return image_names, captions, labels, classes
+                
         
     def get_data(self):
         with open(self.train_text_path , 'r' , encoding = 'utf-8') as file:
@@ -146,6 +169,7 @@ class UITDataset(Dataset):
         classes = list(set(labels))
         classes = { k : v for v , k in enumerate(classes)}
         self.idx_to_classes = { v : k  for v , k in enumerate(classes)}
+        self.classes_to_idx = { k : v  for v , k in enumerate(classes)}
         labels = [classes[label] for label in labels]
         
         if len(labels) != len(captions) or len(labels) != len(image_names):
@@ -155,23 +179,23 @@ class UITDataset(Dataset):
             return None, None, None, None
         
         return image_names, captions, labels, classes
-    # def plot_labels(self):
-    #     classes, counts = np.unique(self.labels, return_counts=True)
-    #     class_names = [self.idx_to_classes[classe] for classe in classes]
-    #     for class_name, count in zip(class_names, counts):
-    #         print(f"{class_name} : {count}")
+#     def plot(self):
+#         classes, counts = np.unique(self.labels, return_counts=True)
+#         class_names = [self.idx_to_classes[classe] for classe in classes]
+#         for class_name, count in zip(class_names, counts):
+#             print(f"{class_name} : {count}")
             
-    #     plt.bar(classes, counts, color=['blue', 'green', 'red', 'purple'])
+#         plt.bar(classes, counts, color=['blue', 'green', 'red', 'purple'])
 
-    #     plt.title('Number of labels')
-    #     plt.axis("off")
-    #     plt.xlabel('Classes')
-    #     plt.ylabel('Number of labels')
+#         plt.title('Number of labels')
+#         plt.axis("off")
+#         plt.xlabel('Classes')
+#         plt.ylabel('Number of labels')
         
-    #     for i in range(len(classes)):
-    #         plt.text(classes[i], counts[i] + 0.1, str(counts[i]), ha='center')
+#         for i in range(len(classes)):
+#             plt.text(classes[i], counts[i] + 0.1, str(counts[i]), ha='center')
 
-    #     plt.show()
+#         plt.show()
     
     def create_inputs(self, batch):
         image_names = batch["image_name"]
