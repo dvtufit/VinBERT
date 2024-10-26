@@ -95,6 +95,7 @@ class TrainingConfig:
         self.test_batch = config["test_batch"]
         self.log = config["log"]
         self.lr = config["lr"]
+        self.sample = config["sample"]
 
 
 class Trainer:

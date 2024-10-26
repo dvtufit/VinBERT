@@ -115,7 +115,7 @@ class ImageProcessor:
         return pixel_values
     
 class UITDataset(Dataset):
-    def __init__(self, train_image_dir, train_text_path, tokenizer, template, image_processor , device='cuda', split=None):
+    def __init__(self, train_image_dir, train_text_path, tokenizer, template, image_processor , device='cuda', sample=None):
         self.train_image_dir = train_image_dir
         self.train_text_path = train_text_path
         self.tokenizer = tokenizer
@@ -127,10 +127,10 @@ class UITDataset(Dataset):
         
         self.image_names, self.captions, self.labels, self.classes = self.get_data()
         
-        if split:
-            self.image_names, self.captions, self.labels, self.classes = self.get_split(split)
+        if sample:
+            self.image_names, self.captions, self.labels, self.classes = self.get_sample(sample)
                     
-    def get_split(self, split):
+    def get_sample(self, sample):
         count = {k : 0 for k in self.classes_to_idx.keys()}
         image_names = []
         captions = []
@@ -138,13 +138,13 @@ class UITDataset(Dataset):
         classes = []
         for image_name, caption, label in zip(self.image_names, self.captions, self.labels):
             class_name = self.idx_to_classes[label]
-            if count[class_name] < split:
+            if count[class_name] < sample:
                 count[class_name] += 1
                 image_names.append(image_name)
                 captions.append(caption)
                 labels.append(label)
                 classes.append(class_name)
-            if sum([v for k , v in count.items()]) >= split * 4 :
+            if sum([v for k , v in count.items()]) >= sample * 4 :
                 break
             
         return image_names, captions, labels, classes

@@ -1,17 +1,14 @@
 import os
 import torch
-import psutil
-import torch_xla.core.xla_model as xm
-import torch_xla.distributed.xla_backend
-import torch_xla.distributed.parallel_loader as pl
-from torch.utils.data import DataLoader, DistributedSampler
-from transformers import AutoModel, AutoConfig, AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer
 from vin_bert_modeling import BERTInternVLChatModel
 from utils import freeze_model_org, unfreeze_model_lora
 from vin_bert_dataset import UITDataset, PromptTemplate, ImageProcessor
 from trainer import Evaluation, TrainingConfig
 from peft import LoraConfig, get_peft_model
+from torch.utils.data import DataLoader
 from transformers import AdamW
+import psutil
 
 def calculate_f1(preds, labels, num_classes):
     f1_scores = []
@@ -101,9 +98,7 @@ def main(args):
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size + val_size])
     val_dataset, test_dataset = torch.utils.data.random_split(test_dataset, [val_size, test_size])
 
-    # Tạo DistributedSampler cho TPU
-    train_sampler = DistributedSampler(train_dataset)
-    train_dataloader = DataLoader(train_dataset, batch_size=config.train_batch, sampler=train_sampler)  
+    train_dataloader = DataLoader(train_dataset, batch_size=config.train_batch, shuffle=True)  
     val_dataloader = DataLoader(val_dataset, batch_size=config.val_batch, shuffle=True)
     test_dataloader = DataLoader(test_dataset, batch_size=config.test_batch, shuffle=False) 
 
@@ -114,11 +109,8 @@ def main(args):
         vin_bert_with_lora.train()
         total_train_loss = 0
 
-        train_sampler.set_epoch(epoch)  # Đặt epoch cho DistributedSampler
-
         for batch_idx, batch in enumerate(train_dataloader):
             inputs = dataset.create_inputs(batch)
-            inputs = {k: v.to(xm.xla_device()) for k, v in inputs.items()}  # Chuyển inputs lên TPU
 
             optimizer.zero_grad()
 
@@ -128,14 +120,14 @@ def main(args):
 
             if loss is not None:
                 loss.backward()
-                xm.optimizer_step(optimizer)  # Cập nhật optimizer cho TPU
+                optimizer.step()
 
                 total_train_loss += loss.item()
 
             # Ghi log loss và RAM sử dụng mỗi 10 batch
             if (batch_idx + 1) % 10 == 0:
                 avg_loss = total_train_loss / (batch_idx + 1)
-                ram_usage = psutil.virtual_memory().used / (1024 ** 2)  # Chuyển đổi sang MB
+                ram_usage = psutil.virtual_memory().used / (1024 ** 2)  # Convert to MB
                 print(f"Epoch {epoch + 1}, Batch {batch_idx + 1}: Average Loss = {avg_loss:.4f}, RAM Usage = {ram_usage:.2f} MB")
 
         avg_train_loss = total_train_loss / len(train_dataloader)
@@ -148,7 +140,6 @@ def main(args):
         with torch.no_grad():
             for batch in val_dataloader:
                 inputs = dataset.create_inputs(batch)
-                inputs = {k: v.to(xm.xla_device()) for k, v in inputs.items()}  # Chuyển inputs lên TPU
                 outputs = vin_bert_with_lora(inputs)
                 logits = outputs.logits
                 predictions = torch.argmax(logits, dim=-1)
